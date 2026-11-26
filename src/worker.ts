@@ -12,21 +12,6 @@ export interface Env {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-
-    // 0. Redirecionamento Canônico de Domínio (www -> ápice não-www)
-    if (url.hostname === 'www.supletivo.net.br') {
-      url.hostname = 'supletivo.net.br';
-      return new Response(null, {
-        status: 301,
-        statusText: 'Moved Permanently',
-        headers: {
-          Location: url.toString(),
-          'Cache-Control': 'public, max-age=31536000, immutable',
-          'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
-        },
-      });
-    }
-
     const pathname = url.pathname;
 
     // 0.1 Redirecionamento Canônico Permanente 301 para rotas consolidadas

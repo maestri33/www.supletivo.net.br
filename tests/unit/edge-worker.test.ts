@@ -166,16 +166,19 @@ describe('Supletivo Main Landing Edge Worker Attribution & Safari ITP Mitigation
     expect(res3.status).toBe(404);
   });
 
-  it('redirects www.supletivo.net.br to apex supletivo.net.br with 301 Moved Permanently', async () => {
-    const mockAssetFetch = vi.fn();
+  it('serves www.supletivo.net.br directly without redirecting to apex', async () => {
+    const mockAssetFetch = vi.fn().mockResolvedValue(
+      new Response('<html><body>ok</body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })
+    );
     const req = new Request('https://www.supletivo.net.br/eja-a-distancia/?ref=teste');
     const res = await worker.fetch(req, { ASSETS: { fetch: mockAssetFetch } });
 
-    expect(res.status).toBe(301);
-    expect(res.headers.get('Location')).toBe('https://supletivo.net.br/eja-a-distancia/?ref=teste');
-    expect(res.headers.get('Cache-Control')).toContain('max-age=31536000');
-    expect(res.headers.get('Strict-Transport-Security')).toBeTruthy();
-    expect(mockAssetFetch).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Location')).toBeNull();
+    expect(mockAssetFetch).toHaveBeenCalledTimes(1);
   });
 
   it('redirects /supletivo-ensino-fundamental/ to /ensino-fundamental/ with 301 Moved Permanently', async () => {

@@ -21,10 +21,6 @@
   "workers_dev": true,
   "routes": [
     {
-      "pattern": "supletivo.net.br/*",
-      "zone_name": "supletivo.net.br"
-    },
-    {
       "pattern": "www.supletivo.net.br/*",
       "zone_name": "supletivo.net.br"
     }
