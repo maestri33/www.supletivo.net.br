@@ -90,9 +90,12 @@ test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
   });
 
   test('fluxo completo zero-button: telefone -> cpf -> chip de email -> redirecionamento com cookie', async ({ page }) => {
+    const checkUrls: string[] = [];
+    const leadUrls: string[] = [];
     const checkPayloads: Array<Record<string, unknown>> = [];
     const leadPayloads: Array<Record<string, unknown>> = [];
     await page.route('**/v1/auth/check', async (route) => {
+      checkUrls.push(route.request().url());
       checkPayloads.push(route.request().postDataJSON() ?? {});
       await route.fulfill({
         status: 200,
@@ -106,6 +109,7 @@ test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
       });
     });
     await page.route('**/v1/leads', async (route) => {
+      leadUrls.push(route.request().url());
       leadPayloads.push(route.request().postDataJSON() ?? {});
       await route.fulfill({
         status: 201,
@@ -154,11 +158,15 @@ test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
     expect(currentUrl).toContain('cpf=52998224725');
     expect(currentUrl).toContain('ref=PROMO123');
 
-    // Valida payloads /v1/* sem campo legado promotor
+    // Valida URLs canônicas da API v1 e payloads sem campo legado promotor
     expect(checkPayloads.length).toBeGreaterThanOrEqual(2);
+    for (const u of checkUrls) {
+      expect(u).toBe('https://api.supletivo.net.br/v1/auth/check');
+    }
     for (const p of checkPayloads) {
       expect(p).not.toHaveProperty('promotor');
     }
+    expect(leadUrls).toEqual(['https://api.supletivo.net.br/v1/leads']);
     expect(leadPayloads).toHaveLength(1);
     expect(leadPayloads[0]).toMatchObject({
       phone: '11987654321',
@@ -172,6 +180,44 @@ test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
     const cookies = await page.context().cookies();
     const sessionCookie = cookies.find((c) => c.name === 'supletivo.session');
     expect(sessionCookie).toBeDefined();
+  });
+
+  test('falha HTTP 500 em POST /v1/leads degrada com fallback de external_id e redireciona para OTP', async ({ page }) => {
+    await page.route('**/v1/auth/check', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          found: false,
+          created: true,
+          registered: true,
+          external_id: 'usr_fallback_v1_777',
+        }),
+      });
+    });
+    await page.route('**/v1/leads', async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Internal Server Error' }),
+      });
+    });
+
+    await page.goto('/');
+    await page.locator('a[data-cta="hero"]').click();
+    await page.locator('#lead-input-phone').fill('11987654321');
+    const cpfInput = page.locator('#lead-input-cpf');
+    await expect(cpfInput).toBeVisible({ timeout: 2000 });
+    await cpfInput.fill('52998224725');
+
+    const emailInput = page.locator('#lead-input-email');
+    await expect(emailInput).toBeVisible({ timeout: 2000 });
+    await emailInput.fill('fallback.aluno@gmail.com');
+    await emailInput.blur();
+
+    await page.waitForURL(/autenticacao\/otp/, { timeout: 5000 });
+    expect(page.url()).toContain('id=usr_fallback_v1_777');
+    expect(page.url()).toContain('tel=11987654321');
   });
 
   test('detecção de CPF inválido mantém estado pendente sem avançar', async ({ page }) => {

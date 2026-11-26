@@ -62,6 +62,27 @@ describe('backend commercial quote contract', () => {
     expect(requestedUrls[0]).toBe('https://api.supletivo.net.br/v1/catalog/pricing?ref=PROMO123');
     expect(payload.promo_pix).toBe('999.00');
   });
+  it('fetchBackendPricing omits ?ref when null and throws on HTTP error', async () => {
+    const requestedUrls: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      requestedUrls.push(String(input));
+      if (requestedUrls.length === 1) {
+        return new Response(JSON.stringify({
+          pix: '1615.00',
+          card: { installments: 12, installment: '159.90', total: '1918.80' },
+          promo_pix: '999.00',
+          promo_card: null,
+          anchor_full: '1615.00',
+          updated_at: '2026-11-26T00:00:00.000Z',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('upstream error', { status: 503 });
+    }) as any;
+
+    await fetchBackendPricing(null);
+    expect(requestedUrls[0]).toBe('https://api.supletivo.net.br/v1/catalog/pricing');
+    await expect(fetchBackendPricing(null)).rejects.toThrow('Pricing unavailable');
+  });
   it('rejects missing fields and conflicting card totals rather than inventing a price', () => {
     expect(() => parseCommercialPrice({ ...quote, promo_card: { ...quote.promo_card, total: '1000' } })).toThrow();
     expect(() => parseCommercialPrice({ pix: '999' })).toThrow();
