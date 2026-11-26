@@ -96,10 +96,12 @@ test.describe('Responsividade e Geometria Viewport (9 Larguras)', () => {
     expect(transformContent).not.toBe('scaleX(0)');
   });
 
-  test('seção de polos seleciona estado a partir de query param ?uf=', async ({ page }) => {
-    await page.goto('/?uf=RJ#polos');
-    const resultCard = page.locator('#polo-result');
-    await expect(resultCard).toHaveAttribute('data-current-uf', 'RJ');
-    await expect(page.locator('#polo-state-title')).toContainText('Rio de Janeiro');
+  test('seção de polos presenciais (PoloCoverage / #polos) não é renderizada na Home (Issue #24)', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#polos')).toHaveCount(0);
+    await expect(page.locator('#polo-result')).toHaveCount(0);
+    await expect(page.locator('#como-funciona')).toBeVisible();
+    await expect(page.locator('#validade')).toBeVisible();
+    await expect(page.locator('#faq')).toBeVisible();
   });
 });

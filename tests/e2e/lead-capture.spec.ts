@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
   test.beforeEach(async ({ page }) => {
-    await page.route('**/api/v1/clients/auth/check', async (route) => {
+    await page.route('**/v1/auth/check', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -11,6 +11,20 @@ test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
           found: false,
           registered: false,
           is_valid: true,
+        }),
+      });
+    });
+
+    await page.route('**/v1/leads', async (route) => {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          user_id: 'usr_lead_v1_123',
+          role_id: 'role_lead_v1_123',
+          status: 'lead',
+          substatus: 'pricing_locked',
         }),
       });
     });
@@ -76,6 +90,36 @@ test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
   });
 
   test('fluxo completo zero-button: telefone -> cpf -> chip de email -> redirecionamento com cookie', async ({ page }) => {
+    const checkPayloads: Array<Record<string, unknown>> = [];
+    const leadPayloads: Array<Record<string, unknown>> = [];
+    await page.route('**/v1/auth/check', async (route) => {
+      checkPayloads.push(route.request().postDataJSON() ?? {});
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          found: false,
+          created: true,
+          registered: true,
+          external_id: 'usr_new_v1_001',
+        }),
+      });
+    });
+    await page.route('**/v1/leads', async (route) => {
+      leadPayloads.push(route.request().postDataJSON() ?? {});
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          user_id: 'usr_new_v1_001',
+          role_id: 'role_new_v1_001',
+          status: 'lead',
+          substatus: 'pricing_locked',
+        }),
+      });
+    });
+
     await page.goto('/?ref=PROMO123&utm_source=meta');
     await page.locator('a[data-cta="hero"]').click();
 
@@ -105,9 +149,24 @@ test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
     // Verifica que cookie foi gravado e que o redirecionamento ocorre
     await page.waitForURL(/autenticacao\/otp/, { timeout: 4000 });
     const currentUrl = page.url();
+    expect(currentUrl).toContain('id=usr_new_v1_001');
     expect(currentUrl).toContain('tel=11987654321');
     expect(currentUrl).toContain('cpf=52998224725');
     expect(currentUrl).toContain('ref=PROMO123');
+
+    // Valida payloads /v1/* sem campo legado promotor
+    expect(checkPayloads.length).toBeGreaterThanOrEqual(2);
+    for (const p of checkPayloads) {
+      expect(p).not.toHaveProperty('promotor');
+    }
+    expect(leadPayloads).toHaveLength(1);
+    expect(leadPayloads[0]).toMatchObject({
+      phone: '11987654321',
+      cpf: '52998224725',
+      email: 'aluno.supletivo@gmail.com',
+      ref: 'PROMO123',
+    });
+    expect(leadPayloads[0]).not.toHaveProperty('promotor');
 
     // Verifica persistência do cookie supletivo.session
     const cookies = await page.context().cookies();
@@ -132,7 +191,7 @@ test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
 
   test('telefone existente no banco redireciona diretamente para OTP sem pedir CPF ou email', async ({ page }) => {
     // Intercepta rota de check para simular número já cadastrado
-    await page.route('**/api/v1/clients/auth/check', async (route) => {
+    await page.route('**/v1/auth/check', async (route) => {
       const request = route.request();
       const postData = request.postDataJSON();
       if (postData?.phone === '11999990001' && !postData?.cpf) {
@@ -174,7 +233,7 @@ test.describe('Captura Inteligente de Alunos (LeadCaptureModal)', () => {
 
   test('CPF existente com telefone diferente exibe aviso com auto-redirect sem botões', async ({ page }) => {
     // Intercepta rota de check: telefone novo, mas CPF já existe em outro número
-    await page.route('**/api/v1/clients/auth/check', async (route) => {
+    await page.route('**/v1/auth/check', async (route) => {
       const request = route.request();
       const postData = request.postDataJSON();
       if (postData?.phone === '11987654321' && !postData?.cpf) {

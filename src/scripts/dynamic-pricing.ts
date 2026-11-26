@@ -263,7 +263,7 @@ export async function initDynamicPricing(resolvedAttr?: Attribution | null): Pro
     if (embedded) payload = JSON.parse(embedded);
     else {
       if (document.body.dataset.pricingState === 'unavailable') return;
-      const endpoint = import.meta.env.DEV ? `${BACKEND_URL}/api/v1/clients/pricing` : '/api/pricing';
+      const endpoint = import.meta.env.DEV ? `${BACKEND_URL}/v1/catalog/pricing` : '/api/pricing';
       const url = hasRef ? `${endpoint}?ref=${encodeURIComponent(attr.ref!)}` : endpoint;
       const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
       if (!res.ok) throw new Error('Pricing unavailable');

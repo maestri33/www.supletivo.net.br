@@ -19,7 +19,7 @@ export function referralFromRequest(request: Request): string | null {
 }
 
 export async function fetchBackendPricing(ref: string | null): Promise<Record<string, unknown>> {
-  const url = new URL('https://backend.supletivo.net.br/api/v1/clients/pricing');
+  const url = new URL('https://api.supletivo.net.br/v1/catalog/pricing');
   if (ref) url.searchParams.set('ref', ref);
   const response = await fetch(url, { headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(6000) });
   if (!response.ok) throw new Error('Pricing unavailable');
