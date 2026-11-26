@@ -650,19 +650,18 @@ import LeadSecurityFooter from './lead-modal/LeadSecurityFooter.astro';
     }
 
     // ── DRY HELPERS (PONYTAIL) ────────────────────────────────────────────────
-    function getBackendUrl(): string {
-      return modal?.dataset.backendUrl?.replace(/\/+$/, '') ?? 'https://api.supletivo.net.br';
-    }
-
-    async function checkAuth(payload: Record<string, unknown>) {
-      const backendUrl = getBackendUrl();
+    async function postBackendJson(
+      path: string,
+      payload: Record<string, unknown>,
+      label: string
+    ) {
+      const backendUrl = modal?.dataset.backendUrl?.replace(/\/+$/, '') ?? 'https://api.supletivo.net.br';
       const attr = initAttribution();
       try {
-        const res = await fetch(`${backendUrl}/v1/auth/check`, {
+        const res = await fetch(`${backendUrl}${path}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            send_otp: true,
             ref: attr?.ref || undefined,
             ...payload,
           }),
@@ -670,31 +669,17 @@ import LeadSecurityFooter from './lead-modal/LeadSecurityFooter.astro';
         });
         return res.ok ? await res.json() : null;
       } catch (err) {
-        console.warn('[lead-capture] Falha ou timeout no checkAuth:', err);
+        console.warn(`[lead-capture] Falha ou timeout no ${label}:`, err);
         return null;
       }
     }
 
-    async function saveLead(payload: { phone: string; cpf: string; email: string }) {
-      const backendUrl = getBackendUrl();
-      const attr = initAttribution();
-      try {
-        const res = await fetch(`${backendUrl}/v1/leads`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phone: payload.phone,
-            cpf: payload.cpf,
-            email: payload.email,
-            ref: attr?.ref || undefined,
-          }),
-          signal: AbortSignal.timeout(30000),
-        });
-        return res.ok ? await res.json() : null;
-      } catch (err) {
-        console.warn('[lead-capture] Falha ou timeout no saveLead:', err);
-        return null;
-      }
+    function checkAuth(payload: Record<string, unknown>) {
+      return postBackendJson('/v1/auth/check', { send_otp: true, ...payload }, 'checkAuth');
+    }
+
+    function saveLead(payload: { phone: string; cpf: string; email: string }) {
+      return postBackendJson('/v1/leads', payload, 'saveLead');
     }
 
     function saveSession(data: Record<string, unknown>) {
@@ -1102,7 +1087,6 @@ import LeadSecurityFooter from './lead-modal/LeadSecurityFooter.astro';
       emailWrapper?.classList.add('valid');
       if (resolvedId) {
         leadExternalId = resolvedId;
-        saveSession({ phone: phoneDigits, cpf: cpfDigits, email: emailValue, externalId: resolvedId });
       }
 
       redirectToOtp({
