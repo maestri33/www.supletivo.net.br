@@ -36,4 +36,13 @@ describe('Remoção Definitiva de Promotor, Carreiras e Renda Extra', () => {
     expect(html).not.toContain('id="trabalhe-conosco"');
     expect(html).not.toContain('data-section="trabalhe-conosco"');
   });
+
+  it('seção de polos presenciais (#polos) e URLs legadas do backend foram removidas do HTML gerado', () => {
+    expect(html).not.toContain('id="polos"');
+    expect(html).not.toContain('Onde você faz a prova final presencial?');
+    expect(html).not.toContain('polo-coverage');
+    expect(html).not.toContain('backend.supletivo.net.br');
+    expect(html).not.toContain('/api/v1/clients/');
+    expect(html).toContain('https://api.supletivo.net.br');
+  });
 });

@@ -638,6 +638,7 @@ import LeadSecurityFooter from './lead-modal/LeadSecurityFooter.astro';
     let isSubmitting = false;
     let lastCheckedPhone = '';
     let lastCheckedCpf = '';
+    let leadExternalId = '';
     let emailDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     let existingTimer: ReturnType<typeof setTimeout> | null = null;
     let existingInterval: ReturnType<typeof setInterval> | null = null;
@@ -649,34 +650,36 @@ import LeadSecurityFooter from './lead-modal/LeadSecurityFooter.astro';
     }
 
     // ── DRY HELPERS (PONYTAIL) ────────────────────────────────────────────────
-    async function checkAuth(payload: Record<string, unknown>) {
-      const backendUrl = modal?.dataset.backendUrl?.replace(/\/+$/, '') ?? 'https://backend.supletivo.net.br';
+    async function postBackendJson(
+      path: string,
+      payload: Record<string, unknown>,
+      label: string
+    ) {
+      const backendUrl = modal?.dataset.backendUrl?.replace(/\/+$/, '') ?? 'https://api.supletivo.net.br';
       const attr = initAttribution();
       try {
-        const res = await fetch(`${backendUrl}/api/v1/clients/auth/check`, {
+        const res = await fetch(`${backendUrl}${path}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            send_otp: true,
-            promotor: attr?.ref || undefined,
             ref: attr?.ref || undefined,
-            attribution: attr ? {
-              ref: attr.ref,
-              utm_source: attr.utm_source,
-              utm_medium: attr.utm_medium,
-              utm_campaign: attr.utm_campaign,
-              gclid: attr.gclid,
-              fbclid: attr.fbclid,
-            } : undefined,
             ...payload,
           }),
           signal: AbortSignal.timeout(30000),
         });
         return res.ok ? await res.json() : null;
       } catch (err) {
-        console.warn('[lead-capture] Falha ou timeout no checkAuth:', err);
+        console.warn(`[lead-capture] Falha ou timeout no ${label}:`, err);
         return null;
       }
+    }
+
+    function checkAuth(payload: Record<string, unknown>) {
+      return postBackendJson('/v1/auth/check', { send_otp: true, ...payload }, 'checkAuth');
+    }
+
+    function saveLead(payload: { phone: string; cpf: string; email: string }) {
+      return postBackendJson('/v1/leads', payload, 'saveLead');
     }
 
     function saveSession(data: Record<string, unknown>) {
@@ -736,9 +739,13 @@ import LeadSecurityFooter from './lead-modal/LeadSecurityFooter.astro';
       phoneWrapper?.classList.add('loading');
       phoneWrapper?.classList.remove('valid');
 
-      const data = await checkAuth({ phone: digits, contato: digits });
+      const data = await checkAuth({ phone: digits });
       phoneWrapper?.classList.remove('loading');
       isCheckingPhone = false;
+
+      if (data?.external_id) {
+        leadExternalId = data.external_id;
+      }
 
       // Se telefone já existe no banco: OTP enviado -> direto pro app!
       if (data?.found) {
@@ -836,7 +843,7 @@ import LeadSecurityFooter from './lead-modal/LeadSecurityFooter.astro';
       cpfWrapper?.classList.remove('valid');
 
       const phoneDigits = inputPhone?.value.replace(/\D/g, '') ?? '';
-      const data = await checkAuth({ cpf: digits, phone: phoneDigits });
+      const data = await checkAuth({ cpf: digits });
       cpfWrapper?.classList.remove('loading');
       isCheckingCpf = false;
 
@@ -1061,24 +1068,29 @@ import LeadSecurityFooter from './lead-modal/LeadSecurityFooter.astro';
         speech.textContent = 'Tudo pronto! Sua pré-matrícula foi autorizada. Redirecionando para concluir sua matrícula…';
       }
 
-      saveSession({ phone: phoneDigits, cpf: cpfDigits, email: emailValue });
+      saveSession({
+        phone: phoneDigits,
+        cpf: cpfDigits,
+        email: emailValue,
+        externalId: leadExternalId || undefined,
+      });
       track('lead_capture_submitted', { has_cpf: true, has_email: true });
 
-      const data = await checkAuth({
-        contato: phoneDigits,
+      const leadData = await saveLead({
         phone: phoneDigits,
         cpf: cpfDigits,
         email: emailValue,
       });
 
+      const resolvedId = leadData?.user_id || leadExternalId || undefined;
       emailWrapper?.classList.remove('loading');
       emailWrapper?.classList.add('valid');
-      if (data?.external_id) {
-        saveSession({ phone: phoneDigits, cpf: cpfDigits, email: emailValue, externalId: data.external_id });
+      if (resolvedId) {
+        leadExternalId = resolvedId;
       }
 
       redirectToOtp({
-        id: data?.external_id,
+        id: resolvedId,
         tel: phoneDigits,
         cpf: cpfDigits,
         email: emailValue,
